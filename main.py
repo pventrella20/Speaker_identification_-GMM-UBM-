@@ -4,7 +4,6 @@ import joblib
 from scipy.io import wavfile
 from functools import reduce
 import numpy as np
-import soundfile as sf
 
 from os import listdir
 from os.path import isfile, join
@@ -88,7 +87,7 @@ class SpeakerRecognition:
                 self.speaker_label.append(i)
             self.spk_end.append(len(self.total_mfcc))
 
-        for i in range(MODEL_SPEAKERS + TOTAL_SPEAKERS):
+        for i in range(TOTAL_TEST_SPEAKERS + TOTAL_SPEAKERS):
             self.spk_test_size.append(len(self.test_mfcc[i]))
             self.spk_start.append(len(self.p_total_mfcc))
             print(i)
@@ -144,7 +143,7 @@ class SpeakerRecognition:
             for j in range(MODEL_SPEAKERS):
                 x = self.GMM[j].score_samples(self.p_spk_mfcc[i]) - self.UBM[j].score_samples(self.p_spk_mfcc[i])
                 for score in x:
-                    if score > 0:
+                    if score > 10:
                         confusion[i][j] += 1
 
         confusion_diag = [confusion[i][i] for i in range(MODEL_SPEAKERS)]
