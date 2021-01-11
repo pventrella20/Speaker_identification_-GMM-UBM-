@@ -40,6 +40,9 @@ for filename in test_files:
         test_speakers.append(''.join(filename.split('.wav')[0]))
 print(test_speakers)
 
+SPEAKERS_NAMES = ['alberto_angela', 'gianni_morandi', 'papa_francesco', 'mike_bongiorno', 'mariastella_gelmini']
+SPEAKERS_NUMBER = len(SPEAKERS_NAMES)
+
 SPEAKERS = gmm_speakers
 ALL_SPEAKERS = ubm_speakers
 TEST_SPEAKERS = test_speakers
@@ -138,13 +141,15 @@ class SpeakerRecognition:
         avg_accuracy = 0
 
         confusion = [[0 for y in range(MODEL_SPEAKERS)] for x in range(TOTAL_TEST_SPEAKERS)]
+        confusion_aggregate = [[0 for w in range(SPEAKERS_NUMBER)] for z in range(TOTAL_TEST_SPEAKERS)]
 
         for i in range(TOTAL_TEST_SPEAKERS):
             for j in range(MODEL_SPEAKERS):
                 x = self.GMM[j].score_samples(self.p_spk_mfcc[i]) - self.UBM[j].score_samples(self.p_spk_mfcc[i])
                 for score in x:
-                    if score > 10:
-                        confusion[i][j] += 1
+                    if score > 0:
+                        confusion[i][j] += 1 #round(score, 2)
+                        confusion_aggregate[i][j%5] += 1 #round(score, 2)
 
         confusion_diag = [confusion[i][i] for i in range(MODEL_SPEAKERS)]
 
@@ -161,17 +166,32 @@ class SpeakerRecognition:
         spk_accuracy = 0
         for i in range(TOTAL_TEST_SPEAKERS):
             best_guess, _ = max(enumerate(confusion[i]), key=lambda p: p[1])
+            best_guess_aggregate, _ = max(enumerate(confusion_aggregate[i]), key=lambda p: p[1])
             raw_values = []
+            raw_values_aggregate = []
             for j in range(MODEL_SPEAKERS):
                 raw_values.append(confusion[i][j])
-            percentage_accuracy = (max(raw_values)/sum(raw_values))*100
+            for l in range(SPEAKERS_NUMBER):
+                raw_values_aggregate.append(confusion_aggregate[i][l])
+            if sum(raw_values) != 0:
+                percentage_accuracy = (max(raw_values)/sum(raw_values))*100
+            else:
+                percentage_accuracy = 0
+            if sum(raw_values_aggregate) != 0:
+                new_percentage_accuracy = (max(raw_values_aggregate)/sum(raw_values_aggregate))*100
+            else:
+                new_percentage_accuracy = 0
             print("For speaker {}, best guess is {} [{}% accuracy]".format(TEST_SPEAKERS[i], SPEAKERS[best_guess], round(percentage_accuracy, 2)))
-            if TEST_SPEAKERS[i].__contains__(SPEAKERS[best_guess]):
-                spk_accuracy += 1
+            print("For speaker {}, best guess is {} [{}% accuracy]".format(TEST_SPEAKERS[i], SPEAKERS_NAMES[best_guess_aggregate],
+                                                                           round(new_percentage_accuracy, 2)))
+            for k in range(0, SPEAKERS_NUMBER):
+                if SPEAKERS_NAMES[k] in SPEAKERS[best_guess]:
+                    if SPEAKERS_NAMES[k] in TEST_SPEAKERS[i]:
+                        spk_accuracy += 1
         spk_accuracy /= TOTAL_TEST_SPEAKERS
 
         avg_accuracy = diag_sum/(remain_sum+diag_sum)
-        return confusion, round(avg_accuracy, 2), round(spk_accuracy, 2)
+        return confusion, confusion_aggregate, round(avg_accuracy, 2), round(spk_accuracy, 2)
 
     def __init__(self):
         self.test_spk = []
@@ -255,10 +275,11 @@ if __name__ == '__main__':
     #SR.setGMMUBM(no_components=13)
     #SR.find_best_params()
     #SR.fit_model()
-    confusion, mfcc_accuracy, spk_accuracy = SR.predict()
+    confusion, confusion_aggregate, mfcc_accuracy, spk_accuracy = SR.predict()
 
     print("Confusion Matrix")
     print(np.matrix(confusion))
+    print(np.matrix(confusion_aggregate))
     print("Accuracy in predicting speakers : {}".format(spk_accuracy))
     print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
 

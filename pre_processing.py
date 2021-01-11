@@ -29,6 +29,6 @@ class SplitWavAudio:
                 print('All splited successfully')
 
 if __name__ == '__main__':
-    folder = './data/gmm_dataset'
-    split_wav = SplitWavAudio(folder, '*.wav')
+    folder = './data/test'
+    split_wav = SplitWavAudio(folder, '9_angela_marcore.wav')
     split_wav.multiple_split(sec_per_split=20)
