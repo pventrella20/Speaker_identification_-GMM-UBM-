@@ -35,7 +35,7 @@ test_files = [f for f in listdir(TEST_DATA_PATH) if isfile(join(TEST_DATA_PATH, 
 test_files.sort()
 test_speakers = []
 for filename in test_files:
-    dups = re.search('[\w].ogg', filename)
+    dups = re.search('[\w].mp3', filename)
     if dups is None and filename != 'convert.sh':
         test_speakers.append(''.join(filename.split('.wav')[0]))
 print(test_speakers)
@@ -139,8 +139,8 @@ class SpeakerRecognition:
             print("Fit start for {}".format(i))
             self.GMM[i].fit(self.spk_mfcc[i])
             self.UBM[i].fit(self.total_mfcc[:self.spk_start[i + j]] + self.total_mfcc[self.spk_end[k - 1]:])
-            joblib.dump(self.UBM[i], 'data/model/ubm' + '_' + self.speaker_label[i] + str(i % TRAIN_SPLITS) + '.pkl')
-            joblib.dump(self.GMM[i], 'data/model/gmm' + '_' + self.speaker_label[i] + str(i % TRAIN_SPLITS) + '.pkl')
+            joblib.dump(self.UBM[i], 'data/model/ubm' + str(i) + '.pkl')
+            joblib.dump(self.GMM[i], 'data/model/gmm' + str(i) + '.pkl')
             print("Fit end for {}".format(i))
             if j <= -TRAIN_SPLITS:
                 j = 0
@@ -153,8 +153,8 @@ class SpeakerRecognition:
     # Predict the output for each model for each speaker and produce confusion matrix
     def load_model(self):
         for i in range(0, MODEL_SPEAKERS):
-            self.GMM.append(joblib.load('data/model/gmm' + '_' + self.speaker_label[i] + str(i % TRAIN_SPLITS) + '.pkl'))
-            self.UBM.append(joblib.load('data/model/ubm' + '_' + self.speaker_label[i] + str(i % TRAIN_SPLITS) + '.pkl'))
+            self.GMM.append(joblib.load('data/model/gmm' + str(i) + '.pkl'))
+            self.UBM.append(joblib.load('data/model/ubm' + str(i) + '.pkl'))
 
     def predict(self):
         avg_accuracy = 0
