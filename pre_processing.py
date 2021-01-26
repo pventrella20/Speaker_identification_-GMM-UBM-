@@ -31,9 +31,9 @@ class SplitWavAudio:
 if __name__ == '__main__':
     folder = './data/gmm_dataset'
     folder_test = './data/test'
-    file_names = ['AA_alberto_angela', 'AC_andrea_camilleri', 'GM_gianni_morandi', 'JB_papa_francesco',
-                  'MB_mike_bongiorno', 'MG_mariastella_gelmini', 'MG_mario_giordano', 'MR_matteo_renzi',
-                  'SF_sabrina_ferilli', 'SB_silvio_berlusconi', 'Z1_rosario_fiorello', 'Z2_maurizio_crozza', 'Z3_paola_cortellesi', 'Z4_neri_marcore']
+    file_names = ['AA_alberto_angela', 'AC_andrea_camilleri', 'GC_giuseppe_conte', 'GM_gianni_morandi', 'JB_papa_francesco',
+                  'MB_mike_bongiorno', 'MG_mariastella_gelmini', 'MR_matteo_renzi', 'SB_silvio_berlusconi', 'SF_sabrina_ferilli',
+                  'Z1_rosario_fiorello', 'Z2_maurizio_crozza', 'Z3_paola_cortellesi', 'Z4_neri_marcore', 'Z5_virginia_raffaele']
     file_names_imitations = ['01_alberto_angela_marcore', '02_mike_bongiorno_fiorello', '03_gianni_morandi_fiorello', '04_papa_francesco_crozza']
     for file in file_names:
         split_wav = SplitWavAudio(folder, file + '.wav')

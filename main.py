@@ -4,7 +4,6 @@ import joblib
 from scipy.io import wavfile
 from functools import reduce
 import numpy as np
-import math
 
 from os import listdir
 from os.path import isfile, join
@@ -37,13 +36,14 @@ test_files.sort()
 test_speakers = []
 for filename in test_files:
     dups = re.search('[\w].mp3', filename)
-    if dups is None and filename != 'convert.sh':
+    dups2 = re.search('[\w].ogg', filename)
+    if dups is None and dups2 is None and filename != 'convert.sh':
         test_speakers.append(''.join(filename.split('.wav')[0]))
 print(test_speakers)
 
-SPEAKERS_NAMES = ['alberto_angela', 'andrea_camilleri', 'gianni_morandi', 'papa_francesco', 'mike_bongiorno',
-                  'mariastella_gelmini', 'mario_giordano', 'matteo_renzi', 'silvio_berlusconi', 'sabrina_ferilli',
-                  'rosario_fiorello', 'maurizio_crozza', 'paola_cortellesi', 'neri_marcore']
+SPEAKERS_NAMES = ['alberto_angela', 'andrea_camilleri', 'giuseppe_conte', 'gianni_morandi', 'papa_francesco', 'mike_bongiorno',
+                  'mariastella_gelmini', 'matteo_renzi', 'silvio_berlusconi', 'sabrina_ferilli',
+                  'rosario_fiorello', 'maurizio_crozza', 'paola_cortellesi', 'neri_marcore', 'virginia_raffaele']
 SPEAKERS_NUMBER = len(SPEAKERS_NAMES)
 
 SPEAKERS = gmm_speakers
@@ -70,39 +70,25 @@ class SpeakerRecognition:
     # Load in data from .wav files in data/
     # Extract mfcc (first 13 coefficients) from each audio sample
     def load_data(self):
-
         self.spk = [wavfile.read(GMM_DATA_PATH + '/' + i + '.wav') for i in SPEAKERS]
         self.spk_mfcc = [psf.mfcc(self.spk[i][1], self.spk[i][0]) for i in range(0, MODEL_SPEAKERS)]
 
         self.all_spk = [wavfile.read(UBM_DATA_PATH + '/' + j + '.wav') for j in ALL_SPEAKERS]
         self.all_spk_mfcc = [psf.mfcc(self.all_spk[j][1], self.all_spk[j][0]) for j in range(0, TOTAL_SPEAKERS)]
 
-        self.train_mfcc += self.spk_mfcc
-        self.train_mfcc += self.all_spk_mfcc
-
         self.p_spk = [wavfile.read(TEST_DATA_PATH + '/' + k + '.wav') for k in TEST_SPEAKERS]
         self.p_spk_mfcc = [psf.mfcc(self.p_spk[k][1], self.p_spk[k][0]) for k in range(0, TOTAL_TEST_SPEAKERS)]
 
-        self.test_mfcc += self.p_spk_mfcc
-        self.test_mfcc += self.all_spk_mfcc
+        self.cepstral_mean_subtraction(self.all_spk_mfcc)
 
-        for i in range(MODEL_SPEAKERS + TOTAL_SPEAKERS):
-            self.spk_train_size.append(len(self.train_mfcc[i]))
+        for i in range(TOTAL_SPEAKERS):
+            self.spk_train_size.append(len(self.all_spk_mfcc[i]))
             self.spk_start.append(len(self.total_mfcc))
             print(i)
-            for mfcc in self.train_mfcc[i]:
+            for mfcc in self.all_spk_mfcc[i]:
                 self.total_mfcc.append(mfcc)
                 self.speaker_label.append(i)
             self.spk_end.append(len(self.total_mfcc))
-
-        for i in range(TOTAL_TEST_SPEAKERS + TOTAL_SPEAKERS):
-            self.spk_test_size.append(len(self.test_mfcc[i]))
-            self.spk_start.append(len(self.p_total_mfcc))
-            print(i)
-            for mfcc in self.test_mfcc[i]:
-                self.p_total_mfcc.append(mfcc)
-                self.p_speaker_label.append(i)
-            self.p_spk_end.append(len(self.p_total_mfcc))
 
 
     # Gaussian Mixture Model is made of a number of Gaussian distribution components.
@@ -124,19 +110,22 @@ class SpeakerRecognition:
 
     # Fit the GMM UBM models with training data
     def fit_model(self):
-        j = 0
-        k = TRAIN_SPLITS
-        for i in range(MODEL_SPEAKERS):
-            j -= 1
+        k = 0
+        for i in range(SPEAKERS_NUMBER):
+            gmm_vector = []
+            for j in range(k, k + (TRAIN_SPLITS-1)):
+                for mfcc in self.spk_mfcc[j]:
+                    gmm_vector.append(mfcc)
             print("Fit start for {}".format(i))
-            self.GMM[i].fit(self.spk_mfcc[i])
-            self.UBM[i].fit(self.total_mfcc[:self.spk_start[i + j]] + self.total_mfcc[self.spk_end[k - 1]:])
-            joblib.dump(self.UBM[i], 'data/model/ubm' + str(i) + '.pkl')
+            self.GMM[i].fit(gmm_vector)
             joblib.dump(self.GMM[i], 'data/model/gmm' + str(i) + '.pkl')
             print("Fit end for {}".format(i))
-            if j <= -TRAIN_SPLITS:
-                j = 0
-                k += TRAIN_SPLITS
+            k += TRAIN_SPLITS
+        print("Fit start for UBM")
+        self.UBM[0].fit(self.total_mfcc)
+        joblib.dump(self.UBM[0], 'data/model/ubm' + str(0) + '.pkl')
+        print("Fit end for UBM")
+
 
     def model(self, no_components=244):
         self.setGMMUBM(no_components)
@@ -144,35 +133,24 @@ class SpeakerRecognition:
 
     # Predict the output for each model for each speaker and produce confusion matrix
     def load_model(self):
-        for i in range(0, MODEL_SPEAKERS):
+        for i in range(0, SPEAKERS_NUMBER):
             self.GMM.append(joblib.load('data/model/gmm' + str(i) + '.pkl'))
-            self.UBM.append(joblib.load('data/model/ubm' + str(i) + '.pkl'))
+        self.UBM.append(joblib.load('data/model/ubm' + str(0) + '.pkl'))
 
     def predict(self):
         avg_accuracy = 0
 
-        confusion = [[0 for y in range(MODEL_SPEAKERS)] for x in range(TOTAL_TEST_SPEAKERS)]
-        confusion_aggregate = [[0 for w in range(SPEAKERS_NUMBER)] for z in range(TOTAL_TEST_SPEAKERS)]
+        confusion = [[0 for y in range(SPEAKERS_NUMBER)] for x in range(TOTAL_TEST_SPEAKERS)]
         confusion_total = [[0 for h in range(SPEAKERS_NUMBER)] for g in range(SPEAKERS_NUMBER)]
 
         for i in range(TOTAL_TEST_SPEAKERS):
-            for j in range(MODEL_SPEAKERS):
-                #x = self.GMM[j].score_samples(self.p_spk_mfcc[i]) - self.UBM[j].score_samples(self.p_spk_mfcc[i])
-                x = self.GMM[j].score(self.p_spk_mfcc[i]) - self.UBM[j].score(self.p_spk_mfcc[i])
-                #for score in x:
-                    #if score > 0:
-                        #confusion[i][j] += 1#round(score, 2)
-                        #confusion_aggregate[i][k] += 1#round(score, 0)
-                #if x > 0:
-                confusion[i][j] += round(x, 2)
-
-        for i in range(TOTAL_TEST_SPEAKERS):
-            k = 0
-            for j in range(MODEL_SPEAKERS):
-                confusion_aggregate[i][k] += confusion[i][j]
-                if (j+1) % TRAIN_SPLITS == 0:
-                    confusion_aggregate[i][k] = round(confusion_aggregate[i][k], 0)
-                    k += 1
+            for j in range(SPEAKERS_NUMBER):
+                x = self.GMM[j].score_samples(self.p_spk_mfcc[i]) - self.UBM[0].score_samples(self.p_spk_mfcc[i])
+                #x = self.GMM[j].score(self.p_spk_mfcc[i]) - self.UBM[0].score(self.p_spk_mfcc[i])
+                for score in x:
+                    if score > 0:
+                        confusion[i][j] += round(score, 2)
+                #confusion[i][j] += round(x, 2)
 
         #confusion_diag = [confusion[i][i] for i in range(MODEL_SPEAKERS)]
 
@@ -189,45 +167,37 @@ class SpeakerRecognition:
         spk_accuracy = 0
         for i in range(TOTAL_TEST_SPEAKERS):
             best_guess, _ = max(enumerate(confusion[i]), key=lambda p: p[1])
-            best_guess_aggregate, _ = max(enumerate(confusion_aggregate[i]), key=lambda p: p[1])
             raw_values = []
-            raw_values_aggregate = []
-            for j in range(MODEL_SPEAKERS):
+            for j in range(SPEAKERS_NUMBER):
                 if confusion[i][j] >= 0:
                     raw_values.append(confusion[i][j])
-            for l in range(SPEAKERS_NUMBER):
-                if confusion_aggregate[i][l] >= 0:
-                    raw_values_aggregate.append(confusion_aggregate[i][l])
 
-            if sum(raw_values_aggregate) != 0:
-                percentage_accuracy = (max(raw_values_aggregate)/sum(raw_values_aggregate))*100
+            if sum(raw_values) != 0:
+                percentage_accuracy = (max(raw_values)/sum(raw_values))*100
             else:
                 percentage_accuracy = 0
 
-            if percentage_accuracy > 65 and confusion_aggregate[i][best_guess_aggregate] > 0:
-                print("For speaker {}, best guess is {} [{}% accuracy]".format(TEST_SPEAKERS[i], SPEAKERS_NAMES[best_guess_aggregate],
+            print("For speaker {}, best guess is {} [{}% accuracy]".format(TEST_SPEAKERS[i], SPEAKERS_NAMES[best_guess],
                                                                            round(percentage_accuracy, 2)))
-            else:
-                print("Speaker {} rejected [best guess {} (aggregate {}), score too low]".format(TEST_SPEAKERS[i], SPEAKERS[best_guess],
-                                                                                                 SPEAKERS_NAMES[best_guess_aggregate]))
 
             for speaker in SPEAKERS_NAMES:
                 if speaker in TEST_SPEAKERS[i]:
-                    if speaker in SPEAKERS_NAMES[best_guess_aggregate]:
+                    if speaker in SPEAKERS_NAMES[best_guess]:
                         confusion_total[SPEAKERS_NAMES.index(speaker)][SPEAKERS_NAMES.index(speaker)] += 1
                         spk_accuracy += 1
                     else:
-                        confusion_total[SPEAKERS_NAMES.index(speaker)][best_guess_aggregate] += 1
+                        confusion_total[SPEAKERS_NAMES.index(speaker)][best_guess] += 1
 
         spk_accuracy /= TOTAL_TEST_SPEAKERS
 
         #avg_accuracy = diag_sum/(remain_sum+diag_sum)
-        return confusion, confusion_aggregate, confusion_total, round(avg_accuracy, 2), round(spk_accuracy, 2)
+        return confusion, confusion_total, round(avg_accuracy, 2), round(spk_accuracy, 2)
 
     def __init__(self):
         self.test_spk = []
         self.test_mfcc = []
         self.train_mfcc = []
+        self.all_mfcc = []
 
         # Speaker data and corresponding mfcc
         self.spk = []
@@ -261,22 +231,18 @@ class SpeakerRecognition:
         self.GMM = []
         self.UBM = []
         self.load_data()
-        self.cepstral_mean_subtraction()
+        self.cepstral_mean_subtraction(self.spk_mfcc)
+        self.cepstral_mean_subtraction(self.p_spk_mfcc)
+
 
     # Cepstral Mean Subtraction (Feature Normalization step)
-    def cepstral_mean_subtraction(self):
-        for i, speaker_mfcc in enumerate(self.spk_mfcc):
+    def cepstral_mean_subtraction(self, mfcc_vector):
+        for i, speaker_mfcc in enumerate(mfcc_vector):
             average = reduce(lambda acc, ele: acc + ele, speaker_mfcc)
             average = list(map(lambda x: x/len(speaker_mfcc), average))
             for j, feature_vector in enumerate(speaker_mfcc):
                 for k, feature in enumerate(feature_vector):
-                    self.spk_mfcc[i][j][k] -= average[k]
-        for i, speaker_mfcc in enumerate(self.p_spk_mfcc):
-            average = reduce(lambda acc, ele: acc + ele, speaker_mfcc)
-            average = list(map(lambda x: x / len(speaker_mfcc), average))
-            for j, feature_vector in enumerate(speaker_mfcc):
-                for k, feature in enumerate(feature_vector):
-                    self.p_spk_mfcc[i][j][k] -= average[k]
+                    mfcc_vector[i][j][k] -= average[k]
 
 
 #TBD : Ten fold validation
@@ -302,15 +268,14 @@ def ten_fold(self):
 if __name__ == '__main__':
 
     SR = SpeakerRecognition()
-    SR.load_model()
-    #SR.setGMMUBM(no_components=13)
+    #SR.setGMMUBM(no_components=512)
     #SR.find_best_params()
     #SR.fit_model()
-    confusion, confusion_aggregate, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
+    SR.load_model()
+    confusion, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
 
     print("Confusion Matrix")
     print(np.matrix(confusion))
-    print(np.matrix(confusion_aggregate))
     print(np.matrix(confusion_total))
     print("Accuracy in predicting speakers : {}".format(spk_accuracy))
     print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
