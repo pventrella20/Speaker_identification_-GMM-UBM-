@@ -3,7 +3,10 @@ from sklearn.mixture import GaussianMixture
 import joblib
 from scipy.io import wavfile
 from functools import reduce
-import numpy as np
+import seaborn as sn
+import pandas as pd
+import matplotlib.pyplot as plt
+from features_extraction import extract_features
 
 from os import listdir
 from os.path import isfile, join
@@ -37,6 +40,7 @@ test_speakers = []
 for filename in test_files:
     dups = re.search('[\w].mp3', filename)
     dups2 = re.search('[\w].ogg', filename)
+    #dups3 = re.search('[\w]_1', filename)
     if dups is None and dups2 is None and filename != 'convert.sh':
         test_speakers.append(''.join(filename.split('.wav')[0]))
 print(test_speakers)
@@ -54,7 +58,7 @@ MODEL_SPEAKERS = len(SPEAKERS)
 TOTAL_SPEAKERS = len(ALL_SPEAKERS)
 TOTAL_TEST_SPEAKERS = len(TEST_SPEAKERS)
 
-TRAIN_SPLITS = 11  # numero di segmenti usati per il training di ogni speaker
+TRAIN_SPLITS = 1  # numero di segmenti usati per il training di ogni speaker
 
 class SpeakerRecognition:
 
@@ -112,12 +116,12 @@ class SpeakerRecognition:
     def fit_model(self):
         k = 0
         for i in range(SPEAKERS_NUMBER):
-            gmm_vector = []
-            for j in range(k, k + (TRAIN_SPLITS-1)):
-                for mfcc in self.spk_mfcc[j]:
-                    gmm_vector.append(mfcc)
+            #gmm_vector = []
+            #for j in range(k, k + (TRAIN_SPLITS-1)):
+                #for mfcc in self.spk_mfcc[j]:
+                    #gmm_vector.append(mfcc)
             print("Fit start for {}".format(i))
-            self.GMM[i].fit(gmm_vector)
+            self.GMM[i].fit(self.spk_mfcc[i])
             joblib.dump(self.GMM[i], 'data/model/gmm' + str(i) + '.pkl')
             print("Fit end for {}".format(i))
             k += TRAIN_SPLITS
@@ -151,18 +155,7 @@ class SpeakerRecognition:
                     if score > 0:
                         confusion[i][j] += round(score, 2)
                 #confusion[i][j] += round(x, 2)
-
-        #confusion_diag = [confusion[i][i] for i in range(MODEL_SPEAKERS)]
-
-        #diag_sum = 0
-        #for item in confusion_diag:
-        #    diag_sum += item
-
-        #remain_sum = 0
-        #for i in range(MODEL_SPEAKERS):
-            #for j in range(MODEL_SPEAKERS):
-                #if i != j:
-                    #remain_sum += confusion[i][j]
+            print("Speaker evaluation {}/{} end".format(i + 1, TOTAL_TEST_SPEAKERS))
 
         spk_accuracy = 0
         for i in range(TOTAL_TEST_SPEAKERS):
@@ -188,9 +181,25 @@ class SpeakerRecognition:
                     else:
                         confusion_total[SPEAKERS_NAMES.index(speaker)][best_guess] += 1
 
+        # diagonale
+        confusion_diag = [confusion_total[i][i] for i in range(SPEAKERS_NUMBER)]
+
+        diag_sum = 0
+        for item in confusion_diag:
+            diag_sum += item
+
+        remain_sum = 0
+        for i in range(SPEAKERS_NUMBER):
+            for j in range(SPEAKERS_NUMBER):
+                if i != j:
+                    remain_sum += confusion[i][j]
+
+        # accuracy sugli speaker
         spk_accuracy /= TOTAL_TEST_SPEAKERS
 
-        #avg_accuracy = diag_sum/(remain_sum+diag_sum)
+        # accuracy media
+        avg_accuracy = diag_sum/(remain_sum+diag_sum)
+
         return confusion, confusion_total, round(avg_accuracy, 2), round(spk_accuracy, 2)
 
     def __init__(self):
@@ -268,15 +277,22 @@ def ten_fold(self):
 if __name__ == '__main__':
 
     SR = SpeakerRecognition()
-    #SR.setGMMUBM(no_components=512)
+    SR.setGMMUBM(no_components=256)
     #SR.find_best_params()
-    #SR.fit_model()
-    SR.load_model()
+    SR.fit_model()
+    #SR.load_model()
     confusion, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
 
-    print("Confusion Matrix")
-    print(np.matrix(confusion))
-    print(np.matrix(confusion_total))
+    df_cm = pd.DataFrame(confusion_total, index=[i for i in SPEAKERS_NAMES],
+                         columns=[i for i in SPEAKERS_NAMES])
+    plt.figure(figsize=(10, 7))
+    plt.title("Confusion Matrix")
+    sn.heatmap(df_cm, annot=True)
+
+    plt.show()
+    #print("Confusion Matrix")
+    #print(np.matrix(confusion))
+    #print(np.matrix(confusion_total))
     print("Accuracy in predicting speakers : {}".format(spk_accuracy))
     print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
 
