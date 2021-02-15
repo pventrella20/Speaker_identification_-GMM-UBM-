@@ -1,4 +1,4 @@
-import python_speech_features as psf
+
 from sklearn.mixture import GaussianMixture
 import joblib
 from scipy.io import wavfile
@@ -7,6 +7,7 @@ import seaborn as sn
 import pandas as pd
 import matplotlib.pyplot as plt
 from features_extraction import extract_features
+import numpy as np
 
 from os import listdir
 from os.path import isfile, join
@@ -58,7 +59,7 @@ MODEL_SPEAKERS = len(SPEAKERS)
 TOTAL_SPEAKERS = len(ALL_SPEAKERS)
 TOTAL_TEST_SPEAKERS = len(TEST_SPEAKERS)
 
-TRAIN_SPLITS = 1  # numero di segmenti usati per il training di ogni speaker
+TRAIN_SPLITS = 11  # numero di segmenti usati per il training di ogni speaker
 
 class SpeakerRecognition:
 
@@ -74,14 +75,40 @@ class SpeakerRecognition:
     # Load in data from .wav files in data/
     # Extract mfcc (first 13 coefficients) from each audio sample
     def load_data(self):
+
         self.spk = [wavfile.read(GMM_DATA_PATH + '/' + i + '.wav') for i in SPEAKERS]
-        self.spk_mfcc = [psf.mfcc(self.spk[i][1], self.spk[i][0]) for i in range(0, MODEL_SPEAKERS)]
+        #self.spk_mfcc = [psf.mfcc(self.spk[i][1], self.spk[i][0]) for i in range(0, MODEL_SPEAKERS)]
+        features = np.asarray(())
+        j = 1
+        for i in SPEAKERS:
+            sr, audio = wavfile.read(GMM_DATA_PATH + '/' + i + '.wav')
+            vector = extract_features(audio, sr)
+            if features.size == 0:
+                features = vector
+            else:
+                features = np.vstack((features, vector))
+            if j == TRAIN_SPLITS:
+                self.spk_mfcc.append(features)
+                features = np.asarray(())
+                j = 0
+            j += 1
+            print("features extracted for {}".format(i))
 
         self.all_spk = [wavfile.read(UBM_DATA_PATH + '/' + j + '.wav') for j in ALL_SPEAKERS]
-        self.all_spk_mfcc = [psf.mfcc(self.all_spk[j][1], self.all_spk[j][0]) for j in range(0, TOTAL_SPEAKERS)]
+        #self.all_spk_mfcc = [psf.mfcc(self.all_spk[j][1], self.all_spk[j][0]) for j in range(0, TOTAL_SPEAKERS)]
+        for i in ALL_SPEAKERS:
+            sr, audio = wavfile.read(UBM_DATA_PATH + '/' + i + '.wav')
+            features = extract_features(audio, sr)
+            self.all_spk_mfcc.append(features)
+            print("features extracted for {}".format(i))
 
         self.p_spk = [wavfile.read(TEST_DATA_PATH + '/' + k + '.wav') for k in TEST_SPEAKERS]
-        self.p_spk_mfcc = [psf.mfcc(self.p_spk[k][1], self.p_spk[k][0]) for k in range(0, TOTAL_TEST_SPEAKERS)]
+        #self.p_spk_mfcc = [psf.mfcc(self.p_spk[k][1], self.p_spk[k][0]) for k in range(0, TOTAL_TEST_SPEAKERS)]
+        for i in TEST_SPEAKERS:
+            sr, audio = wavfile.read(TEST_DATA_PATH + '/' + i + '.wav')
+            features = extract_features(audio, sr)
+            self.p_spk_mfcc.append(features)
+            print("features extracted for {}".format(i))
 
         self.cepstral_mean_subtraction(self.all_spk_mfcc)
 
@@ -114,7 +141,7 @@ class SpeakerRecognition:
 
     # Fit the GMM UBM models with training data
     def fit_model(self):
-        k = 0
+        #k = 0
         for i in range(SPEAKERS_NUMBER):
             #gmm_vector = []
             #for j in range(k, k + (TRAIN_SPLITS-1)):
@@ -124,11 +151,11 @@ class SpeakerRecognition:
             self.GMM[i].fit(self.spk_mfcc[i])
             joblib.dump(self.GMM[i], 'data/model/gmm' + str(i) + '.pkl')
             print("Fit end for {}".format(i))
-            k += TRAIN_SPLITS
-        print("Fit start for UBM")
-        self.UBM[0].fit(self.total_mfcc)
-        joblib.dump(self.UBM[0], 'data/model/ubm' + str(0) + '.pkl')
-        print("Fit end for UBM")
+            #k += TRAIN_SPLITS
+        #print("Fit start for UBM")
+        #self.UBM[0].fit(self.total_mfcc)
+        #joblib.dump(self.UBM[0], 'data/model/ubm' + str(0) + '.pkl')
+        #print("Fit end for UBM")
 
 
     def model(self, no_components=244):
@@ -192,13 +219,15 @@ class SpeakerRecognition:
         for i in range(SPEAKERS_NUMBER):
             for j in range(SPEAKERS_NUMBER):
                 if i != j:
-                    remain_sum += confusion[i][j]
+                    remain_sum += confusion_total[i][j]
 
         # accuracy sugli speaker
         spk_accuracy /= TOTAL_TEST_SPEAKERS
+        spk_accuracy *= 100
 
         # accuracy media
         avg_accuracy = diag_sum/(remain_sum+diag_sum)
+        avg_accuracy *= 100
 
         return confusion, confusion_total, round(avg_accuracy, 2), round(spk_accuracy, 2)
 
@@ -277,23 +306,26 @@ def ten_fold(self):
 if __name__ == '__main__':
 
     SR = SpeakerRecognition()
-    SR.setGMMUBM(no_components=256)
+    #SR.setGMMUBM(no_components=512)
     #SR.find_best_params()
-    SR.fit_model()
-    #SR.load_model()
-    confusion, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
-
-    df_cm = pd.DataFrame(confusion_total, index=[i for i in SPEAKERS_NAMES],
-                         columns=[i for i in SPEAKERS_NAMES])
-    plt.figure(figsize=(10, 7))
-    plt.title("Confusion Matrix")
-    sn.heatmap(df_cm, annot=True)
-
-    plt.show()
+    #SR.fit_model()
+    SR.load_model()
+    SR.find_best_params()
+    #confusion, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
     #print("Confusion Matrix")
     #print(np.matrix(confusion))
-    #print(np.matrix(confusion_total))
-    print("Accuracy in predicting speakers : {}".format(spk_accuracy))
-    print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
+    # print(np.matrix(confusion_total))
+    #print("Accuracy in predicting speakers : {}".format(spk_accuracy))
+    #print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
+
+    # stampa visuale della matrice di confusione
+    #df_cm = pd.DataFrame(confusion_total, index=[i for i in SPEAKERS_NAMES],
+    #                     columns=[i for i in SPEAKERS_NAMES])
+    #plt.figure(figsize=(10, 7))
+    #plt.title("Confusion Matrix")
+    #sn.heatmap(df_cm, annot=True)
+    #plt.show()
+
+
 
 

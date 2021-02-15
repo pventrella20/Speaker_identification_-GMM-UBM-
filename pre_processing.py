@@ -36,8 +36,10 @@ if __name__ == '__main__':
                   'Z1_rosario_fiorello', 'Z2_maurizio_crozza', 'Z3_paola_cortellesi', 'Z4_neri_marcore', 'Z5_virginia_raffaele']
     file_names_imitations = ['01_neri_marcore_angela', '02_rosario_fiorello_bongiorno', '03_rosario_fiorello_morandi', '04_maurizio_crozza_papa',
                              'neri_marcore_angela', 'neri_marcore_angela_2', 'neri_marcore_conte', 'paola_cortellesi_gelmini',
-                             'rosario_fiorello_berlusconi', 'rosario_fiorello_bongiorno', 'rosario_fiorello_morandi', 'rosario_fiorello_morandi_2', 'virginia_raffaele_ferilli']
-    file_names_imitations_2 = ['rosario_fiorello_camilleri', 'rosario_fiorello_camilleri2']
+                             'rosario_fiorello_berlusconi', 'rosario_fiorello_bongiorno', 'rosario_fiorello_morandi',
+                             'rosario_fiorello_morandi2', 'virginia_raffaele_ferilli', 'maurizio_crozza_renzi', 'maurizio_crozza_berlusconi',
+                             'paola_cortellesi_gelmini2', 'rosario_fiorello_camilleri', 'rosario_fiorello_camilleri2']
+    file_names_imitations_2 = ['neri_marcore_angela3']
     for file in file_names_imitations_2:
         split_wav = SplitWavAudio(folder_test, file + '.wav')
-        split_wav.multiple_split(sec_per_split=10)
+        split_wav.multiple_split(sec_per_split=5)
