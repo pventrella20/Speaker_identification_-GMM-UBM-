@@ -1,17 +1,20 @@
 
-from sklearn.mixture import GaussianMixture
-import joblib
-from scipy.io import wavfile
+import copy
+import re
 from functools import reduce
-import seaborn as sn
-import pandas as pd
-import matplotlib.pyplot as plt
-from features_extraction import extract_features
-import numpy as np
-
 from os import listdir
 from os.path import isfile, join
-import re
+
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sn
+from scipy.io import wavfile
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import confusion_matrix
+
+from features_extraction import extract_features
 
 GMM_DATA_PATH = './data/gmm_dataset'
 UBM_DATA_PATH = './data/ubm_dataset'
@@ -59,7 +62,11 @@ MODEL_SPEAKERS = len(SPEAKERS)
 TOTAL_SPEAKERS = len(ALL_SPEAKERS)
 TOTAL_TEST_SPEAKERS = len(TEST_SPEAKERS)
 
-TRAIN_SPLITS = 11  # numero di segmenti usati per il training di ogni speaker
+TRAIN_SPLITS = 7  # numero di segmenti usati per il training di ogni speaker
+
+FEATURE_ORDER = 40          # numero di features
+NUMBER_OF_GAUSSIAN = 256    # numero di componenti
+SCALING_FACTOR = 0.01
 
 class SpeakerRecognition:
 
@@ -141,21 +148,17 @@ class SpeakerRecognition:
 
     # Fit the GMM UBM models with training data
     def fit_model(self):
-        #k = 0
+        print("Fit start for UBM")
+        self.UBM[0].fit(self.total_mfcc)
+        joblib.dump(self.UBM[0], 'data/model/ubm' + str(0) + '.pkl')
+        print("Fit end for UBM")
         for i in range(SPEAKERS_NUMBER):
-            #gmm_vector = []
-            #for j in range(k, k + (TRAIN_SPLITS-1)):
-                #for mfcc in self.spk_mfcc[j]:
-                    #gmm_vector.append(mfcc)
-            print("Fit start for {}".format(i))
+            print("Fit start for {}".format(SPEAKERS_NAMES[i]))
+            gmm_means = self.map_adaptation(self.UBM[0], self.spk_mfcc[i])
             self.GMM[i].fit(self.spk_mfcc[i])
+            self.GMM[i].means_ = gmm_means
             joblib.dump(self.GMM[i], 'data/model/gmm' + str(i) + '.pkl')
-            print("Fit end for {}".format(i))
-            #k += TRAIN_SPLITS
-        #print("Fit start for UBM")
-        #self.UBM[0].fit(self.total_mfcc)
-        #joblib.dump(self.UBM[0], 'data/model/ubm' + str(0) + '.pkl')
-        #print("Fit end for UBM")
+            print("Fit end for {}".format(SPEAKERS_NAMES[i]))
 
 
     def model(self, no_components=244):
@@ -167,6 +170,7 @@ class SpeakerRecognition:
         for i in range(0, SPEAKERS_NUMBER):
             self.GMM.append(joblib.load('data/model/gmm' + str(i) + '.pkl'))
         self.UBM.append(joblib.load('data/model/ubm' + str(0) + '.pkl'))
+
 
     def predict(self):
         avg_accuracy = 0
@@ -202,6 +206,8 @@ class SpeakerRecognition:
 
             for speaker in SPEAKERS_NAMES:
                 if speaker in TEST_SPEAKERS[i]:
+                    self.y_true.append(speaker)
+                    self.y_predict.append(SPEAKERS_NAMES[best_guess])
                     if speaker in SPEAKERS_NAMES[best_guess]:
                         confusion_total[SPEAKERS_NAMES.index(speaker)][SPEAKERS_NAMES.index(speaker)] += 1
                         spk_accuracy += 1
@@ -230,6 +236,17 @@ class SpeakerRecognition:
         avg_accuracy *= 100
 
         return confusion, confusion_total, round(avg_accuracy, 2), round(spk_accuracy, 2)
+
+
+    def cmatrix_display(self, accuracy, confusion_matrix, figsize=(10, 7)):
+        df_cm = pd.DataFrame(confusion_matrix, index=[i for i in SPEAKERS_NAMES],
+                             columns=[i for i in SPEAKERS_NAMES])
+        plt.figure(figsize=figsize)
+        plt.title('Confusion Matrix\n Accuracy: {0:.3f}'.format(accuracy))
+        sn.heatmap(df_cm, cmap='rocket_r', annot=True, fmt='g')
+        plt.ylabel('True speaker')
+        plt.xlabel('Predicted speaker')
+        plt.show()
 
     def __init__(self):
         self.test_spk = []
@@ -266,6 +283,9 @@ class SpeakerRecognition:
         self.p_spk_start = []
         self.p_spk_end = []
 
+        self.y_true = []
+        self.y_predict = []
+
         self.GMM = []
         self.UBM = []
         self.load_data()
@@ -283,48 +303,51 @@ class SpeakerRecognition:
                     mfcc_vector[i][j][k] -= average[k]
 
 
-#TBD : Ten fold validation
-def ten_fold(self):
-    fold_size = 0.1 * self.n
-    fold_offset = 0.0
-    accuracy_per_fold = 0
-    average_accuracy = 0
+    def map_adaptation(self, ubm, features):
+        probability = ubm.predict_proba(features)
+        n_i = np.sum(probability, axis=0)
 
-    for i in range(0, 10):
-        print("Fold start is {}  and fold end is {} ".format( fold_offset, fold_offset + fold_size))
-        accuracy = self.execute(int(fold_offset), int(fold_offset + fold_size))
-        print("Accuracy is of test {} is : {} ".format(i, accuracy))
-        average_accuracy += accuracy
-        fold_offset += fold_size
+        E = np.zeros((FEATURE_ORDER, NUMBER_OF_GAUSSIAN), dtype=np.float32)
+        for ii in range(0, NUMBER_OF_GAUSSIAN):
+            probability_gauss = np.tile(probability[:, ii], (FEATURE_ORDER, 1)).T * features
+            if n_i[ii] == 0:
+                E[:, ii] = 0
+            else:
+                E[:, ii] = np.sum(probability_gauss, axis=0) / n_i[ii]
 
-    average_accuracy /= 10.0
-    print("Average accuracy  " + str(100 * average_accuracy))
-    return average_accuracy
+        alpha = n_i / (n_i + SCALING_FACTOR)
+
+        old_mean = copy.deepcopy(ubm.means_)
+        new_mean = np.zeros((NUMBER_OF_GAUSSIAN, FEATURE_ORDER), dtype=np.float32)
+
+        for ii in range(0, NUMBER_OF_GAUSSIAN):
+            new_mean[ii, :] = (alpha[ii] * E[:, ii]) + ((1 - alpha[ii]) * old_mean[ii, :])
+
+        return new_mean
 
 
 # Final result is a confusion matrix which represents the accuracy of the fit of the model
 if __name__ == '__main__':
 
     SR = SpeakerRecognition()
-    #SR.setGMMUBM(no_components=512)
+    #SR.setGMMUBM(no_components=NUMBER_OF_GAUSSIAN)
     #SR.find_best_params()
     #SR.fit_model()
     SR.load_model()
-    SR.find_best_params()
-    #confusion, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
-    #print("Confusion Matrix")
-    #print(np.matrix(confusion))
-    # print(np.matrix(confusion_total))
-    #print("Accuracy in predicting speakers : {}".format(spk_accuracy))
-    #print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
+    #SR.find_best_params()
+    confusion, confusion_total, mfcc_accuracy, spk_accuracy = SR.predict()
+    print("Confusion Matrix")
+    print(np.matrix(confusion))
+    print(np.matrix(confusion_total))
+    print("Accuracy in predicting speakers : {}".format(spk_accuracy))
+    print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
 
+    cm = confusion_matrix(SR.y_true, SR.y_predict, SPEAKERS_NAMES)
     # stampa visuale della matrice di confusione
-    #df_cm = pd.DataFrame(confusion_total, index=[i for i in SPEAKERS_NAMES],
-    #                     columns=[i for i in SPEAKERS_NAMES])
-    #plt.figure(figsize=(10, 7))
-    #plt.title("Confusion Matrix")
-    #sn.heatmap(df_cm, annot=True)
-    #plt.show()
+    SR.cmatrix_display(spk_accuracy, cm)
+
+
+
 
 
 

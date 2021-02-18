@@ -39,7 +39,9 @@ if __name__ == '__main__':
                              'rosario_fiorello_berlusconi', 'rosario_fiorello_bongiorno', 'rosario_fiorello_morandi',
                              'rosario_fiorello_morandi2', 'virginia_raffaele_ferilli', 'maurizio_crozza_renzi', 'maurizio_crozza_berlusconi',
                              'paola_cortellesi_gelmini2', 'rosario_fiorello_camilleri', 'rosario_fiorello_camilleri2']
-    file_names_imitations_2 = ['neri_marcore_angela3']
+    file_names_imitations_2 = ['neri_marcore_angela3', 'maurizio_crozza_papa', 'neri_marcore_conte', 'paola_cortellesi_gelmini2',
+                               'rosario_fiorello_camilleri', 'virginia_raffaele_ferilli', 'maurizio_crozza_berlusconi', 'maurizio_crozza_renzi',
+                               'rosario_fiorello_morandi_2']
     for file in file_names_imitations_2:
         split_wav = SplitWavAudio(folder_test, file + '.wav')
-        split_wav.multiple_split(sec_per_split=5)
+        split_wav.multiple_split(sec_per_split=1)
