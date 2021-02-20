@@ -13,6 +13,7 @@ import seaborn as sn
 from scipy.io import wavfile
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
 
 from features_extraction import extract_features
 
@@ -65,7 +66,7 @@ TOTAL_TEST_SPEAKERS = len(TEST_SPEAKERS)
 TRAIN_SPLITS = 7  # numero di segmenti usati per il training di ogni speaker
 
 FEATURE_ORDER = 40          # numero di features
-NUMBER_OF_GAUSSIAN = 256    # numero di componenti
+NUMBER_OF_GAUSSIAN = 512    # numero di componenti
 SCALING_FACTOR = 0.01
 
 class SpeakerRecognition:
@@ -150,14 +151,14 @@ class SpeakerRecognition:
     def fit_model(self):
         print("Fit start for UBM")
         self.UBM[0].fit(self.total_mfcc)
-        joblib.dump(self.UBM[0], 'data/model/ubm' + str(0) + '.pkl')
+        joblib.dump(self.UBM[0], 'data/model/ubm' + '.pkl')
         print("Fit end for UBM")
         for i in range(SPEAKERS_NUMBER):
             print("Fit start for {}".format(SPEAKERS_NAMES[i]))
             gmm_means = self.map_adaptation(self.UBM[0], self.spk_mfcc[i])
             self.GMM[i].fit(self.spk_mfcc[i])
             self.GMM[i].means_ = gmm_means
-            joblib.dump(self.GMM[i], 'data/model/gmm' + str(i) + '.pkl')
+            joblib.dump(self.GMM[i], 'data/model/gmm' + str(i+1) + SPEAKERS_NAMES[i] + '.pkl')
             print("Fit end for {}".format(SPEAKERS_NAMES[i]))
 
 
@@ -168,8 +169,8 @@ class SpeakerRecognition:
     # Predict the output for each model for each speaker and produce confusion matrix
     def load_model(self):
         for i in range(0, SPEAKERS_NUMBER):
-            self.GMM.append(joblib.load('data/model/gmm' + str(i) + '.pkl'))
-        self.UBM.append(joblib.load('data/model/ubm' + str(0) + '.pkl'))
+            self.GMM.append(joblib.load('data/model/gmm' + str(i+1) + SPEAKERS_NAMES[i] + '.pkl'))
+        self.UBM.append(joblib.load('data/model/ubm' + '.pkl'))
 
 
     def predict(self):
@@ -342,6 +343,7 @@ if __name__ == '__main__':
     print("Accuracy in predicting speakers : {}".format(spk_accuracy))
     print("Accuracy in testing for MFCC : {}".format(mfcc_accuracy))
 
+    print("Accuracy score: {}".format(accuracy_score(SR.y_true, SR.y_predict)))
     cm = confusion_matrix(SR.y_true, SR.y_predict, SPEAKERS_NAMES)
     # stampa visuale della matrice di confusione
     SR.cmatrix_display(spk_accuracy, cm)
