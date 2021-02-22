@@ -4,7 +4,11 @@ import python_speech_features as mfcc
 
 
 def calculate_delta(array):
-    """Calculate and returns the delta of given feature vector matrix"""
+    """
+    calcola le delta MFCC dell'array in input (20 dimensioni)
+    :param array: array di features
+    :return:
+    """
 
     rows, cols = array.shape
     deltas = np.zeros((rows, 20))
@@ -28,8 +32,13 @@ def calculate_delta(array):
 
 
 def extract_features(audio, rate):
-    """extract 20 dim mfcc features from an audio, performs CMS and combines
-    delta to make it 40 dim feature vector"""
+    """
+    estrae i vettori MFCC a 20 dimensioni dal file audio e li unisce alle MFCC-delta a 20 dimensioni,
+    creando un vettore di features a 40 dimensioni
+    :param audio: file audio in input
+    :param rate: frequenza del file audio
+    :return:
+    """
 
     mfcc_feat = mfcc.mfcc(audio, rate, 0.025, 0.01, 20, appendEnergy=True)
 
@@ -37,9 +46,3 @@ def extract_features(audio, rate):
     delta = calculate_delta(mfcc_feat)
     combined = np.hstack((mfcc_feat, delta))
     return combined
-
-
-#
-if __name__ == "__main__":
-    print
-    "In main, Call extract_features(audio,signal_rate) as parameters"
