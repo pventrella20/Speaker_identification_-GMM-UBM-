@@ -8,6 +8,10 @@ from sklearn.mixture import GaussianMixture
 from features_extraction import extract_features
 from map_adaptation import map_adapt
 from files_manager import file_processing
+# import warnings filter
+from warnings import simplefilter
+# ignore all future warnings
+simplefilter(action='ignore', category=FutureWarning)
 
 NUMBER_OF_GAUSSIAN = 512  # numero di componenti gaussiane
 
@@ -119,6 +123,7 @@ class SpeakerRecognition:
         :return:
         """
         confusion_score = [[0 for _ in range(self.speakers_number)] for _ in range(self.test_speakers_n)]
+        confusion_percent = [[0 for _ in range(self.speakers_number)] for _ in range(self.test_speakers_n)]
 
         for i in range(self.test_speakers_n):
             for j in range(self.speakers_number):
@@ -126,19 +131,24 @@ class SpeakerRecognition:
                 for score in x:
                     if score > 0:
                         confusion_score[i][j] += round(score, 2)
-            print("Speaker evaluation {}/{} end".format(i + 1, self.test_speakers_n))
+            print("speaker evaluation {}/{} end".format(i + 1, self.test_speakers_n))
 
         for i in range(self.test_speakers_n):
             best_guess, _ = max(enumerate(confusion_score[i]), key=lambda p: p[1])
 
-            print("For speaker {}, best guess is {}".format(self.test_files[i], self.speakers_names[best_guess]))
+            print("for speaker {}, best guess is {}".format(self.test_files[i], self.speakers_names[best_guess]))
 
             for speaker in self.speakers_names:
                 if speaker in self.test_files[i]:
                     self.y_true.append(speaker)
                     self.y_predict.append(self.speakers_names[best_guess])
 
-        return confusion_score
+        for i in range(self.test_speakers_n):
+            row_values = sum(confusion_score[i])
+            for j in range(self.speakers_number):
+                confusion_percent[i][j] += round((confusion_score[i][j]/row_values)*100, 2)
+
+        return confusion_score, confusion_percent
 
     @staticmethod
     def cepstral_mean_subtraction(mfcc_vector):
