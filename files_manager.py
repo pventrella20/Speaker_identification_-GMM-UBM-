@@ -1,6 +1,17 @@
 import re
 from os import listdir
 from os.path import isfile, join
+from typing import List
+
+
+def read_files(path):
+    files = [f for f in listdir(path) if isfile(join(path, f))]
+    files_names: List[str] = []
+    for filename in files:
+        dups = re.search('[\w].ogg', filename)
+        if dups is None and filename != 'convert.sh':
+            files_names.append(''.join(filename.split('.wav')[0]))
+    return files_names
 
 
 def file_processing(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH):

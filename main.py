@@ -2,19 +2,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
+import math
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 
 from speaker_identification import SpeakerRecognition
+from files_manager import read_files
+from pre_processing import splitting
 
 GMM_DATA_PATH = './data/gmm_dataset'
 UBM_DATA_PATH = './data/ubm_dataset_1000'
 TEST_DATA_PATH = './data/test'
-TRAIN_SPLITS = 7  # numero di audio per l'addestramento di ogni speaker
+TEMP_DATA_PATH = './data/temp'
 
 
-def cmatrix_display(accuracy, confusion_matrix_spk, spk_names, figsize=(10, 11)):
+def cmatrix_display(accuracy, confusion_matrix_spk, spk_names, figsize=(10, 7)):
     """
     visualizza a video la matrice di confusione
     :param spk_names: lista dei parlatori per cui il modello è addestrato
@@ -33,6 +36,11 @@ def cmatrix_display(accuracy, confusion_matrix_spk, spk_names, figsize=(10, 11))
     plt.show()
 
 
+def preprocessing(fold, sec):
+    files = read_files(fold)
+    splitting(fold, files, sec)
+
+
 if __name__ == '__main__':
     """
     il risultato finale è una matrice di confusione che rende visuale l'accuratezza del sistema
@@ -40,20 +48,47 @@ if __name__ == '__main__':
     print("# Speakers Identification System #")
     print("> please insert training files in 'gmm_dataset' folder and testing files in 'test' folder")
     flag = True
+    choice = ""
+    choice2 = ""
+    secs = 0
+    ngauss = 0
     end_program = False
     while not end_program:
+        flag = True
         while flag:
             choice = input("> write 'train' for training or 'test' for testing: ")
             if choice == "test" or choice == "train":
                 flag = False
+        flag = True
+        while flag:
+            choice2 = input("> do you need to split training or testing files? (yes/no): ")
+            if choice2 == "yes" or choice2 == "no":
+                flag = False
+        if choice2 == "yes":
+            print("> insert files to split into 'temp' folder (remember to execute 'convert.sh' first)")
+            flag = True
+            while flag:
+                choice2 = input("> how many seconds per split? ")
+                secs = int(choice2)
+                if isinstance(secs, int):
+                    flag = False
+                print(isinstance(secs, int))
+            preprocessing(TEMP_DATA_PATH, secs)
+            print("> move MANUALLY training splits into 'gmm_dataset' folder and testing splits into 'test' folder")
+            choice2 = input("> press ENTER when you're ready to start training/testing...")
+
         if choice == "train":
-            # TODO gestire splits
-            # TODO chiedere e gestire numero di gaussiani
-            SR = SpeakerRecognition(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH, TRAIN_SPLITS, False)
+            flag = True
+            while flag:
+                choice2 = input("> insert number of Gaussian components for models (a power of 2): ")
+                ngauss = int(choice2)
+                if math.log(ngauss, 2).is_integer():
+                    flag = False
+            SR = SpeakerRecognition(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH, ngauss, False)
             SR.model_training()
             print("> training complete!")
         else:
-            SR = SpeakerRecognition(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH, TRAIN_SPLITS)
+            SR = SpeakerRecognition(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH)
             SR.load_model()
             confusion, confusion_p = SR.predict()
             print("> scoring complete!")

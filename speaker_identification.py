@@ -13,8 +13,6 @@ from warnings import simplefilter
 # ignore all future warnings
 simplefilter(action='ignore', category=FutureWarning)
 
-NUMBER_OF_GAUSSIAN = 512  # numero di componenti gaussiane
-
 
 class SpeakerRecognition:
 
@@ -26,7 +24,7 @@ class SpeakerRecognition:
         """
         self.GMM = []
         self.UBM = []
-        for i in range(self.gmm_files):
+        for i in range(self.gmm_speakers_n):
             self.GMM.append(GaussianMixture(n_components=no_components, covariance_type='diag'))
         self.UBM.append(GaussianMixture(n_components=no_components, covariance_type='diag'))
 
@@ -54,20 +52,18 @@ class SpeakerRecognition:
 
             # estraggo le features dei file di addestramento delle GMM
             features = np.asarray(())
-            j = 1
-            for i in self.gmm_files:
-                sr, audio = wavfile.read(self.gmm_data_path + '/' + i + '.wav')
-                vector = extract_features(audio, sr)
-                if features.size == 0:
-                    features = vector
-                else:
-                    features = np.vstack((features, vector))
-                if j == self.train_splits:
-                    self.spk_mfcc.append(features)
-                    features = np.asarray(())
-                    j = 0
-                j += 1
-                print("features extracted for {}".format(i))
+            for name in self.speakers_names:
+                for i in self.gmm_files:
+                    if name in i:
+                        sr, audio = wavfile.read(self.gmm_data_path + '/' + i + '.wav')
+                        vector = extract_features(audio, sr)
+                        if features.size == 0:
+                            features = vector
+                        else:
+                            features = np.vstack((features, vector))
+                self.spk_mfcc.append(features)
+                features = np.asarray(())
+                print("features extracted for {}".format(name))
 
             # estraggo le features dei file di addestramento della UBM
             for i in self.ubm_files:
@@ -93,19 +89,17 @@ class SpeakerRecognition:
         print("Fit end for UBM")
         for i in range(self.speakers_number):
             print("Fit start for {}".format(self.speakers_names[i]))
-            gmm_means = map_adapt(self.UBM[0], self.spk_mfcc[i], NUMBER_OF_GAUSSIAN)
+            gmm_means = map_adapt(self.UBM[0], self.spk_mfcc[i], self.n_gaussian)
             self.GMM[i] = self.UBM[0]
             self.GMM[i].means_ = gmm_means
             joblib.dump(self.GMM[i], 'data/model/gmm' + str(i + 1) + "_" + self.speakers_names[i] + '.pkl')
             print("Fit end for {}".format(self.speakers_names[i]))
 
-    def model_training(self, no_components=NUMBER_OF_GAUSSIAN):
+    def model_training(self):
         """
         alloca lo spazio e addestra i modelli
-        :param no_components: numero di distribuzioni gaussiane
-        :return:
         """
-        self.setGMMUBM(no_components)
+        self.setGMMUBM(self.n_gaussian)
         self.fit_model()
 
     def load_model(self):
@@ -164,7 +158,7 @@ class SpeakerRecognition:
                 for k, feature in enumerate(feature_vector):
                     mfcc_vector[i][j][k] -= average[k]
 
-    def __init__(self, gmmpath, ubmpath, testpath, splits, fitted=True):
+    def __init__(self, gmmpath, ubmpath, testpath, n_gauss=512, fitted=True):
         # dati degli speakers e relativi MFCC
         self.spk = []
         self.spk_mfcc = []
@@ -209,8 +203,8 @@ class SpeakerRecognition:
         # numero degli speakers del modello
         self.speakers_number = len(self.speakers_names)
 
-        # numero di segmenti audio per l'addestramento
-        self.train_splits = splits
+        # numero di componenti gaussiane
+        self.n_gaussian = n_gauss
 
         # caricamento dei dati
         self.load_data(fitted)
