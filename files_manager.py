@@ -45,6 +45,7 @@ def file_processing(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH):
         curr_elem = elem.split("_")
         speakers.append(curr_elem[1] + "_" + curr_elem[2])
     speakers_names = list(dict.fromkeys(speakers))
+    print(speakers_names)
 
     # cerca e memorizza i nomi dei file audio per il testing dei modelli
     test_files = [f for f in listdir(TEST_DATA_PATH) if isfile(join(TEST_DATA_PATH, f))]
