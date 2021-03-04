@@ -6,8 +6,8 @@ class SplitWavAudio:
     """
     classe per lo split di un file audio
     """
-    def __init__(self, folder1, filename):
-        self.folder = folder1
+    def __init__(self, folder1, folder2, filename):
+        self.folder = folder2
         self.filename = filename
         self.filepath = folder1 + '/' + filename
 
@@ -43,19 +43,20 @@ class SplitWavAudio:
         for i in range(0, total_secs, sec_per_split):
             split_fn = self.filename.replace('.wav', '') + '_' + str(int(i / sec_per_split)) + '.wav'
             self.single_split(i, i + sec_per_split, split_fn)
-            print(str(int(i / sec_per_split)) + ' Done')
+            print(str(int(i / sec_per_split)) + ") " + self.filename + ' done')
             if i == total_secs - sec_per_split:
-                print('All splitted successfully')
+                print('...all splitted successfully')
 
 
-def splitting(folder, file_names, sec_per_split):
+def splitting(folderStart, folderEnd, file_names, sec_per_split):
     """
     splitta tutti i file in una cartella in audio della stessa lunghezza (in secondi)
-    :param folder: cartella dei files
+    :param folderStart: cartella dei files
+    :param folderEnd: cartella di destinazione
     :param file_names: nomi dei files
     :param sec_per_split: secondi per ogni split
     :return:
     """
     for file in file_names:
-        split_wav = SplitWavAudio(folder, file + '.wav')
+        split_wav = SplitWavAudio(folderStart, folderEnd, file + '.wav')
         split_wav.multiple_split(sec_per_split)

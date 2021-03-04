@@ -37,6 +37,7 @@ def file_processing(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH):
     gmm_files.sort()
     gmm_speakers = []
     speakers = []
+    speakersL = []
     for filename in gmm_files:
         dups = re.search('[\w].ogg', filename)
         if dups is None and filename != 'convert.sh':
@@ -44,7 +45,10 @@ def file_processing(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH):
     for elem in gmm_speakers:
         curr_elem = elem.split("_")
         speakers.append(curr_elem[1] + "_" + curr_elem[2])
+        speakersL.append(curr_elem[2])
     speakers_names = list(dict.fromkeys(speakers))
+    speakers_labels = list(dict.fromkeys(speakersL))
+    print(">> speakers names:")
     print(speakers_names)
 
     # cerca e memorizza i nomi dei file audio per il testing dei modelli
@@ -57,4 +61,4 @@ def file_processing(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH):
         if dups is None and dups2 is None and filename != 'convert.sh':
             test_speakers.append(''.join(filename.split('.wav')[0]))
 
-    return gmm_speakers, ubm_speakers, test_speakers, speakers_names
+    return gmm_speakers, ubm_speakers, test_speakers, speakers_names, speakers_labels

@@ -14,6 +14,7 @@ GMM_DATA_PATH = './data/gmm_dataset'
 UBM_DATA_PATH = './data/ubm_dataset_1000'
 TEST_DATA_PATH = './data/test'
 TEMP_DATA_PATH = './data/temp'
+SPLIT_DATA_PATH = './data/splitted'
 
 
 def cmatrix_display(accuracy, confusion_matrix_spk, spk_names, figsize=(10, 7)):
@@ -32,17 +33,19 @@ def cmatrix_display(accuracy, confusion_matrix_spk, spk_names, figsize=(10, 7)):
     sn.heatmap(df_cm, cmap='rocket_r', annot=True, fmt='g')
     plt.ylabel('True speaker')
     plt.xlabel('Predicted speaker')
+    plt.subplots_adjust(bottom=0.155, right=0.924)
     plt.show()
 
 
-def preprocessing(fold, sec):
+def preprocessing(fold1, fold2, sec):
     """
     divide i file nella cartella in segmenti da x secondi
-    :param fold: percorso della cartella
+    :param fold1: percorso della cartella
+    :param fold2: percorso dei file splittati
     :param sec: secondi per segmento
     """
-    files = read_files(fold)
-    splitting(fold, files, sec)
+    files = read_files(fold1)
+    splitting(fold1, fold2, files, sec)
 
 
 def test():
@@ -55,15 +58,15 @@ def test():
     SR.predict()
     print("> ...testing complete!")
     print("Accuracy score: {}\n".format(accuracy_score(SR.y_true, SR.y_predict)))
-    print(classification_report(SR.y_true, SR.y_predict, target_names=SR.speakers_names))
-    cm = confusion_matrix(SR.y_true, SR.y_predict, SR.speakers_names)
-    cmatrix_display(accuracy_score(SR.y_true, SR.y_predict), cm, SR.speakers_names)
+    print(classification_report(SR.y_true, SR.y_predict, target_names=SR.speakers_label, zero_division=0))
+    cm = confusion_matrix(SR.y_true, SR.y_predict, SR.speakers_label)
+    cmatrix_display(accuracy_score(SR.y_true, SR.y_predict), cm, SR.speakers_label)
 
 
 def train():
-    '''
+    """
     effettua il training dei modelli a partire dai file nella cartella 'gmm_dataset' e 'ubm_dataset'
-    '''
+    """
     print("> training started...")
     SR = SpeakerRecognition(GMM_DATA_PATH, UBM_DATA_PATH, TEST_DATA_PATH, ngauss, False)
     SR.model_training()
@@ -103,9 +106,8 @@ if __name__ == '__main__':
                 secs = int(choice2)
                 if isinstance(secs, int):
                     flag = False
-                print(isinstance(secs, int))
-            preprocessing(TEMP_DATA_PATH, secs)  # preprocessing dei file
-            print(">> move MANUALLY training splits into 'gmm_dataset' folder and testing splits into 'test' folder")
+            preprocessing(TEMP_DATA_PATH, SPLIT_DATA_PATH, secs)  # preprocessing dei file
+            print(">> you can found splitted files into 'splitted' folder")
             choice2 = input("> write something when you're ready to start training/testing...")
 
         # FASE DI TRAINING

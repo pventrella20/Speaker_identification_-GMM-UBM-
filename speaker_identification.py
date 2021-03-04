@@ -37,11 +37,13 @@ class SpeakerRecognition:
 
         # carico in memoria ed estraggo le features dei file di test
         self.p_spk = [wavfile.read(self.test_data_path + '/' + k + '.wav') for k in self.test_files]
+        print(">> starting test files feature extraction...")
         for i in self.test_files:
             sr, audio = wavfile.read(self.test_data_path + '/' + i + '.wav')
             features = extract_features(audio, sr)
             self.p_spk_mfcc.append(features)
             print("features extracted for {}".format(i))
+        print(">> test files feature extraction complete!\n")
 
         # carico in memoria i file di addestramento delle GMM (necessari per associare un nome al relativo modello)
         self.spk = [wavfile.read(self.gmm_data_path + '/' + i + '.wav') for i in self.gmm_files]
@@ -50,6 +52,7 @@ class SpeakerRecognition:
             # carico in memoria i file per l'addestramento della UBM
             self.all_spk = [wavfile.read(self.ubm_data_path + '/' + j + '.wav') for j in self.ubm_files]
 
+            print(">> starting training files feature extraction...")
             # estraggo le features dei file di addestramento delle GMM
             features = np.asarray(())
             for name in self.speakers_names:
@@ -64,8 +67,10 @@ class SpeakerRecognition:
                 self.spk_mfcc.append(features)
                 features = np.asarray(())
                 print("features extracted for {}".format(name))
+            print(">> training files feature extraction complete!\n")
 
             # estraggo le features dei file di addestramento della UBM
+            print(">> starting UBM files feature extraction...")
             for i in self.ubm_files:
                 sr, audio = wavfile.read(self.ubm_data_path + '/' + i + '.wav')
                 features = extract_features(audio, sr)
@@ -77,6 +82,7 @@ class SpeakerRecognition:
             for i in range(self.ubm_speakers_n):
                 for mfcc in self.all_spk_mfcc[i]:
                     self.total_mfcc.append(mfcc)
+            print(">> UBM files feature extraction complete!\n")
 
     def fit_model(self):
         """
@@ -125,17 +131,25 @@ class SpeakerRecognition:
                 for score in x:
                     if score > 0:
                         confusion_score[i][j] += round(score, 2)
-            print("speaker evaluation {}/{} end".format(i + 1, self.test_speakers_n))
+            print("speaker evaluation {}/{} end".format(i + 1, self.test_speakers_n))  # scoring
 
-        for i in range(self.test_speakers_n):
+        for i in range(self.test_speakers_n):  # restituisce il best_guess per lo speaker i
             best_guess, _ = max(enumerate(confusion_score[i]), key=lambda p: p[1])
 
             print("for speaker {}, best guess is {}".format(self.test_files[i], self.speakers_names[best_guess]))
 
-            for speaker in self.speakers_names:
+            for speaker in self.speakers_names:  # crea i vettori (speaker reale - predizione)
                 if speaker in self.test_files[i]:
                     self.y_true.append(speaker)
                     self.y_predict.append(self.speakers_names[best_guess])
+
+        # converto i nomi degli speakers in label (solo cognomi) per un miglior displaying nella matrice di confusione
+        for i in range(self.speakers_number):
+            for j in range(self.test_speakers_n):
+                if self.speakers_label[i] in self.y_true[j]:
+                    self.y_true[j] = self.speakers_label[i]
+                if self.speakers_label[i] in self.y_predict[j]:
+                    self.y_predict[j] = self.speakers_label[i]
 
         for i in range(self.test_speakers_n):
             row_values = sum(confusion_score[i])
@@ -191,9 +205,10 @@ class SpeakerRecognition:
         self.ubm_files = []
         # nome degli speakers del modello
         self.speakers_names = []
+        self.speakers_label = []
 
         # avvaloro le liste di ogni categoria di file audio a partire dai rispettivi path
-        self.gmm_files, self.ubm_files, self.test_files, self.speakers_names = \
+        self.gmm_files, self.ubm_files, self.test_files, self.speakers_names, self.speakers_label = \
             file_processing(self.gmm_data_path, self.ubm_data_path, self.test_data_path)
 
         # numero di file da processare
