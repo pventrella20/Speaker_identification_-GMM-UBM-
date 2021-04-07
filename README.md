@@ -16,9 +16,9 @@ La cartella ''data'' contiene diverse cartelle al suo interno, il cui utilizzo d
   - ''splitted'': in questa cartella verranno creati gli split a partire dagli audio presenti nella cartella ''temp''
   - ''test'': inserire qui i file di testing
   - ''ubm_dataset'': vi si trovano i file necessari all'addestramento della UBM
-NOTA: i nomi dei file di training devono seguire la seguente sintassi -> #_nomespeaker_cognomespeaker_note
-      per # si intende un identificativo numerico o letterale,
-      per note si intende un qualsiasi testo (numeri o lettere) utile per l'utente (ad esempio il personaggio imitato)
+NOTA: i nomi dei file di training devono seguire la seguente sintassi -> #_nomespeaker_cognomespeaker_note<br>
+      per # si intende un identificativo numerico o letterale,<br>
+      per note si intende un qualsiasi testo (numeri o lettere) utile per l'utente (ad esempio il personaggio imitato)<br>
       es. AA_alberto_angela_0 oppure 01_maurizio_crozza_renzi
       
 **SETUP**
