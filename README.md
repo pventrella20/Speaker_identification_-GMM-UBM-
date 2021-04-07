@@ -47,4 +47,5 @@ cartella di destinazione (se di training o di testing).
 
 ## **ESEMPIO**
 - si consiglia di iniziare a sperimentare sui dati già presenti nelle rispettive cartelle, lanciando ''main.py'', scrivendo 'test', digitando 'no' 
-  lo splitting e facendo partire il sistema sui file di 1 minuto presenti nella cartella ''data/test''
+  lo splitting e facendo partire il sistema sui file di 1 minuto presenti nella cartella ''data/test'', poiché far partire un nuovo training sovrascrirebbe
+  i modelli già presenti.
