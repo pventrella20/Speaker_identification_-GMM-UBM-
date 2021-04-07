@@ -8,6 +8,7 @@ Il sistema ha diversi requisiti, librerie da installare per il corretto funziona
   - matplotlib.pyplot
   - pandas
   - seaborn
+
 La cartella ''data'' contiene diverse cartelle al suo interno, il cui utilizzo di ognuna è descritto di seguito:
   - ''gmm_dataset'': deve contenere i file utilizzati per l'addestramento del sistema (necessari per leggere i nomi degli speakers)
   - ''model'': in questa cartella sono presenti i modelli .pkl degli speaker memorizzati
