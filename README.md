@@ -9,6 +9,9 @@ Il sistema ha diversi requisiti, librerie da installare per il corretto funziona
   - pandas
   - seaborn
 
+Il sistema lavora con file .WAV, si consiglia di lanciare il file 'convert.sh' presente in alcune cartelle per la conversione nel suddetto formato 
+di file .ogg o .mp3 e il ricampionamento a 16kHz.
+
 La cartella ''data'' contiene diverse cartelle al suo interno, il cui utilizzo di ognuna è descritto di seguito:
   - ''gmm_dataset'': deve contenere i file utilizzati per l'addestramento del sistema (necessari per leggere i nomi degli speakers)
   - ''model'': in questa cartella sono presenti i modelli .pkl degli speaker memorizzati
