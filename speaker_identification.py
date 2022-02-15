@@ -183,11 +183,12 @@ class SpeakerRecognition:
         :return:
         """
         for i, speaker_mfcc in enumerate(mfcc_vector):
-            average = reduce(lambda acc, ele: acc + ele, speaker_mfcc)
-            average = list(map(lambda x: x / len(speaker_mfcc), average))
-            for j, feature_vector in enumerate(speaker_mfcc):
-                for k, feature in enumerate(feature_vector):
-                    mfcc_vector[i][j][k] -= average[k]
+            if len(speaker_mfcc) != 0:
+                average = reduce(lambda acc, ele: acc + ele, speaker_mfcc)
+                average = list(map(lambda x: x / len(speaker_mfcc), average))
+                for j, feature_vector in enumerate(speaker_mfcc):
+                    for k, feature in enumerate(feature_vector):
+                        mfcc_vector[i][j][k] -= average[k]
 
     def __init__(self, gmmpath, ubmpath, testpath, n_gauss=512, fitted=True):
         # dati degli speakers e relativi MFCC
