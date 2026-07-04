@@ -283,7 +283,7 @@ class SpeakerIDApp:
         bar.columnconfigure(0, weight=1)
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(bar, textvariable=self.status_var, style="TLabel").grid(row=0, column=0, sticky="w")
-        self.progress = ttk.Progressbar(bar, mode="indeterminate", length=180)
+        self.progress = ttk.Progressbar(bar, mode="determinate", length=220, maximum=100, value=0)
         self.progress.grid(row=0, column=1, sticky="e")
 
     # ---------------------------------------------------------------- logging
@@ -326,10 +326,18 @@ class SpeakerIDApp:
         for btn in (self.train_button, self.identify_button, self.split_button):
             btn.configure(state=state)
         if busy:
-            self.progress.start(12)
+            self.progress.configure(value=0)
         else:
-            self.progress.stop()
+            self.progress.configure(value=100)
         self.status_var.set(status)
+
+    def _set_progress(self, percent: float, status: str) -> None:
+        value = max(0.0, min(100.0, float(percent)))
+        self.progress.configure(value=value)
+        self.status_var.set(f"{status} ({value:.0f}%)")
+
+    def _progress_from_worker(self, percent: float, status: str) -> None:
+        self.root.after(0, self._set_progress, percent, status)
 
     def _run_async(self, task, on_success, busy_status: str) -> None:
         """Runs `task()` in a worker thread; dispatches result/errors on the UI thread."""
@@ -352,6 +360,7 @@ class SpeakerIDApp:
             if on_success is not None:
                 on_success(result)
         finally:
+            self._set_progress(100.0, "Completed")
             self._set_busy(False, "Operation complete")
 
     def _on_task_error(self, exc: Exception) -> None:
@@ -380,7 +389,7 @@ class SpeakerIDApp:
                 f"Trained {len(labels)} speaker models + UBM.\n"
                 f"Speakers: {', '.join(labels) if labels else '—'}")
 
-        self._run_async(use_case.execute, done, "Training in progress…")
+        self._run_async(lambda: use_case.execute(on_progress=self._progress_from_worker), done, "Training in progress…")
 
     # --------------------------------------------------------------- identify
     def _on_identify(self) -> None:
@@ -388,7 +397,11 @@ class SpeakerIDApp:
         extractor = MFCCFeatureExtractor()
         repo = ModelRepository(paths.models)
         use_case = IdentifySpeakersUseCase(paths, extractor, repo)
-        self._run_async(use_case.execute, self._render_identification, "Identification in progress…")
+        self._run_async(
+            lambda: use_case.execute(on_progress=self._progress_from_worker),
+            self._render_identification,
+            "Identification in progress…",
+        )
 
     def _render_identification(self, results) -> None:
         self.results_tree.delete(*self.results_tree.get_children())
@@ -459,7 +472,11 @@ class SpeakerIDApp:
             messagebox.showinfo("Split complete",
                                 f"Created {total} segments from {len(result)} files.")
 
-        self._run_async(lambda: use_case.execute(seconds), done, "Split in progress…")
+        self._run_async(
+            lambda: use_case.execute(seconds, on_progress=self._progress_from_worker),
+            done,
+            "Split in progress…",
+        )
 
 
 def _has_rocket() -> bool:

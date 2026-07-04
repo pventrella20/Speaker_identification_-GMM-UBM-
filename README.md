@@ -76,7 +76,7 @@ with:
 - a data-folder selector at the top;
 - parameters (Gaussian components, relevance factor, seconds per segment);
 - operations run in the background (the window stays responsive) with a
-  **progress bar** and an embedded **live log**;
+  **percentage progress bar (0-100%)** and an embedded **live log**;
 - a per-file results table (predicted vs. actual) with hit/miss highlighting,
   the **accuracy** value and a **confusion matrix** drawn directly in the window.
 

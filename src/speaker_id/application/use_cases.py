@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 from sklearn.mixture import GaussianMixture
@@ -25,17 +26,36 @@ from ..ml.persistence import ModelRepository
 
 logger = logging.getLogger(__name__)
 
+ProgressCallback = Callable[[float, str], None]
+
+
+def _emit_progress(on_progress: ProgressCallback | None, percent: float, message: str) -> None:
+    if on_progress is not None:
+        on_progress(max(0.0, min(100.0, percent)), message)
+
 
 @dataclass
 class SplitAudioUseCase:
     paths: DataPaths
 
-    def execute(self, seconds_per_segment: int) -> dict[str, list]:
+    def execute(self, seconds_per_segment: int, on_progress: ProgressCallback | None = None) -> dict[str, list]:
         repo = AudioRepository(self.paths.temp)
         splitter = AudioSplitter(self.paths.temp, self.paths.splitted)
         stems = repo.list_stems()
         logger.info("Splitting %d file(s) from %s into %ds segments", len(stems), self.paths.temp, seconds_per_segment)
-        return splitter.split_all(stems, seconds_per_segment)
+
+        if not stems:
+            _emit_progress(on_progress, 100.0, "No files to split")
+            return {}
+
+        _emit_progress(on_progress, 0.0, f"Splitting {len(stems)} file(s)")
+        output: dict[str, list] = {}
+        total = len(stems)
+        for idx, stem in enumerate(stems, start=1):
+            output[stem] = splitter.split(stem, seconds_per_segment)
+            percent = (idx / total) * 100.0
+            _emit_progress(on_progress, percent, f"Split {idx}/{total}: {stem}")
+        return output
 
 
 @dataclass
@@ -45,7 +65,7 @@ class TrainModelsUseCase:
     feature_extractor: MFCCFeatureExtractor
     model_repository: ModelRepository
 
-    def execute(self) -> list[str]:
+    def execute(self, on_progress: ProgressCallback | None = None) -> list[str]:
         """Trains the UBM on `ubm_dataset`, then MAP-adapts one GMM per speaker
         found in `gmm_dataset`. Returns the list of trained speaker labels."""
         ubm_repo = AudioRepository(self.paths.ubm_dataset)
@@ -55,13 +75,22 @@ class TrainModelsUseCase:
         if not ubm_stems:
             raise FileNotFoundError(f"No .wav files found in {self.paths.ubm_dataset}")
         logger.info("Extracting UBM features from %d file(s)", len(ubm_stems))
-        ubm_features = np.vstack(self._extract_all(ubm_repo, ubm_stems))
+        _emit_progress(on_progress, 0.0, "Preparing training data")
+
+        def ubm_extract_progress(done: int, total: int, stem: str) -> None:
+            percent = (done / total) * 15.0
+            _emit_progress(on_progress, percent, f"UBM features {done}/{total}: {stem}")
+
+        ubm_features = np.vstack(self._extract_all(ubm_repo, ubm_stems, on_item=ubm_extract_progress))
         ubm_features = cepstral_mean_normalize(ubm_features)
+        _emit_progress(on_progress, 15.0, "UBM features ready")
 
         logger.info("Fitting UBM with %d Gaussian components", self.config.n_gaussians)
+        _emit_progress(on_progress, 20.0, "Fitting UBM")
         ubm = GaussianMixture(n_components=self.config.n_gaussians, covariance_type="diag")
         ubm.fit(ubm_features)
         self.model_repository.save_ubm(ubm)
+        _emit_progress(on_progress, 35.0, "UBM fitted and saved")
 
         speakers = self._group_by_speaker(gmm_repo.list_stems())
         if not speakers:
@@ -70,21 +99,52 @@ class TrainModelsUseCase:
                 "(expected '#_name_surname_note.wav')"
             )
 
-        for label, stems in speakers.items():
+        speaker_labels = sorted(speakers)
+        total_speakers = len(speaker_labels)
+
+        for speaker_idx, label in enumerate(speaker_labels):
+            stems = speakers[label]
+            stage_start = 35.0 + (65.0 * speaker_idx / total_speakers)
+            stage_end = 35.0 + (65.0 * (speaker_idx + 1) / total_speakers)
+            extract_end = stage_start + (stage_end - stage_start) * 0.5
+
             logger.info("Adapting speaker model for '%s' (%d file(s))", label, len(stems))
-            features = np.vstack(self._extract_all(gmm_repo, stems))
+
+            def speaker_extract_progress(done: int, total: int, stem: str) -> None:
+                if total <= 0:
+                    _emit_progress(on_progress, stage_start, f"Adapting {label}")
+                    return
+                ratio = done / total
+                percent = stage_start + (extract_end - stage_start) * ratio
+                _emit_progress(
+                    on_progress,
+                    percent,
+                    f"Extracting features for {label} ({done}/{total}): {stem}",
+                )
+
+            features = np.vstack(self._extract_all(gmm_repo, stems, on_item=speaker_extract_progress))
             features = cepstral_mean_normalize(features)
             speaker_gmm = adapt_speaker_model(ubm, features, self.config.map_relevance_factor)
             self.model_repository.save_speaker_model(label, speaker_gmm)
+            _emit_progress(on_progress, stage_end, f"Adapted {speaker_idx + 1}/{total_speakers}: {label}")
 
         logger.info("Training complete: %d speaker model(s) + 1 UBM", len(speakers))
-        return sorted(speakers)
+        _emit_progress(on_progress, 100.0, "Training complete")
+        return speaker_labels
 
-    def _extract_all(self, repo: AudioRepository, stems: list[str]) -> list[np.ndarray]:
+    def _extract_all(
+        self,
+        repo: AudioRepository,
+        stems: list[str],
+        on_item: Callable[[int, int, str], None] | None = None,
+    ) -> list[np.ndarray]:
         features = []
-        for stem in stems:
+        total = len(stems)
+        for idx, stem in enumerate(stems, start=1):
             clip = repo.load(stem)
             features.append(self.feature_extractor.extract(clip.samples, clip.sample_rate))
+            if on_item is not None:
+                on_item(idx, total, stem)
         return features
 
     @staticmethod
@@ -115,7 +175,7 @@ class IdentifySpeakersUseCase:
     model_repository: ModelRepository
     classifier: SpeakerClassifier = field(default_factory=FrameVotingClassifier)
 
-    def execute(self) -> list[IdentificationResult]:
+    def execute(self, on_progress: ProgressCallback | None = None) -> list[IdentificationResult]:
         test_repo = AudioRepository(self.paths.test)
         test_stems = test_repo.list_stems()
         if not test_stems:
@@ -127,8 +187,10 @@ class IdentifySpeakersUseCase:
             raise FileNotFoundError("No trained speaker models found. Run 'train' first.")
         speaker_models = {label: self.model_repository.load_speaker_model(label) for label in labels}
 
+        _emit_progress(on_progress, 0.0, f"Identifying {len(test_stems)} file(s)")
         results = []
-        for stem in test_stems:
+        total = len(test_stems)
+        for idx, stem in enumerate(test_stems, start=1):
             clip = test_repo.load(stem)
             features = self.feature_extractor.extract(clip.samples, clip.sample_rate)
             features = cepstral_mean_normalize(features)
@@ -137,6 +199,7 @@ class IdentifySpeakersUseCase:
             true_label = self._infer_true_label(stem, labels)
             logger.info("file=%s predicted=%s true=%s", stem, predicted_label, true_label)
             results.append(IdentificationResult(stem, predicted_label, true_label, scores))
+            _emit_progress(on_progress, (idx / total) * 100.0, f"Processed {idx}/{total}: {stem}")
         return results
 
     @staticmethod
