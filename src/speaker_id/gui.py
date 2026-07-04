@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -72,6 +73,8 @@ class SpeakerIDApp:
         self.log_queue: "queue.Queue[tuple[int, str]]" = queue.Queue()
         self._busy = False
         self._canvas: FigureCanvasTkAgg | None = None
+        self._progress_started_at: float | None = None
+        self._progress_last_value = 0.0
 
         self._configure_root()
         self._configure_style()
@@ -326,18 +329,46 @@ class SpeakerIDApp:
         for btn in (self.train_button, self.identify_button, self.split_button):
             btn.configure(state=state)
         if busy:
+            self._progress_started_at = time.monotonic()
+            self._progress_last_value = 0.0
             self.progress.configure(value=0)
         else:
+            self._progress_started_at = None
+            self._progress_last_value = 100.0
             self.progress.configure(value=100)
         self.status_var.set(status)
 
     def _set_progress(self, percent: float, status: str) -> None:
         value = max(0.0, min(100.0, float(percent)))
+        if self._busy:
+            value = max(self._progress_last_value, value)
+            self._progress_last_value = value
         self.progress.configure(value=value)
-        self.status_var.set(f"{status} ({value:.0f}%)")
+        eta = self._format_eta(value)
+        if eta is None:
+            self.status_var.set(f"{status} ({value:.0f}%)")
+        else:
+            self.status_var.set(f"{status} ({value:.0f}%, ETA {eta})")
 
     def _progress_from_worker(self, percent: float, status: str) -> None:
         self.root.after(0, self._set_progress, percent, status)
+
+    def _format_eta(self, percent: float) -> str | None:
+        if not self._busy:
+            return None
+        if self._progress_started_at is None:
+            return None
+        if percent <= 0.0 or percent >= 100.0:
+            return None
+
+        elapsed = max(0.0, time.monotonic() - self._progress_started_at)
+        remaining = elapsed * (100.0 - percent) / percent
+        seconds = int(round(remaining))
+        minutes, secs = divmod(seconds, 60)
+        if minutes < 60:
+            return f"{minutes:02d}:{secs:02d}"
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
 
     def _run_async(self, task, on_success, busy_status: str) -> None:
         """Runs `task()` in a worker thread; dispatches result/errors on the UI thread."""

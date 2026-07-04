@@ -1,18 +1,17 @@
-"""Use-cases: the only place that orchestrates repositories, feature extraction
-and models together. Everything here is constructed via dependency injection
-(paths, config, extractor, repositories, classifier are all passed in), so each
-use-case can be unit-tested with fakes/mocks instead of real audio files and a
-real filesystem -- the original `SpeakerRecognition` class did I/O, feature
-extraction, training, persistence and prediction all in one object, which made
-any of that impossible to test in isolation.
+"""Use-cases: orchestration layer for repositories, feature extraction and models.
+
+Everything here is dependency-injected (paths, config, extractor, repositories,
+classifier), so each use-case is unit-testable in isolation.
 """
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy as np
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.mixture import GaussianMixture
 
 from ..audio.io import AudioRepository
@@ -27,6 +26,10 @@ from ..ml.persistence import ModelRepository
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[float, str], None]
+UBM_FIT_STAGE_START = 20.0
+UBM_FIT_STAGE_END = 35.0
+UBM_MAX_EM_ITERATIONS = 100
+UBM_PROGRESS_EMIT_EVERY = 2
 
 
 def _emit_progress(on_progress: ProgressCallback | None, percent: float, message: str) -> None:
@@ -66,14 +69,14 @@ class TrainModelsUseCase:
     model_repository: ModelRepository
 
     def execute(self, on_progress: ProgressCallback | None = None) -> list[str]:
-        """Trains the UBM on `ubm_dataset`, then MAP-adapts one GMM per speaker
-        found in `gmm_dataset`. Returns the list of trained speaker labels."""
+        """Train UBM then MAP-adapt one speaker GMM per enrolled speaker."""
         ubm_repo = AudioRepository(self.paths.ubm_dataset)
         gmm_repo = AudioRepository(self.paths.gmm_dataset)
 
         ubm_stems = ubm_repo.list_stems()
         if not ubm_stems:
             raise FileNotFoundError(f"No .wav files found in {self.paths.ubm_dataset}")
+
         logger.info("Extracting UBM features from %d file(s)", len(ubm_stems))
         _emit_progress(on_progress, 0.0, "Preparing training data")
 
@@ -86,11 +89,9 @@ class TrainModelsUseCase:
         _emit_progress(on_progress, 15.0, "UBM features ready")
 
         logger.info("Fitting UBM with %d Gaussian components", self.config.n_gaussians)
-        _emit_progress(on_progress, 20.0, "Fitting UBM")
-        ubm = GaussianMixture(n_components=self.config.n_gaussians, covariance_type="diag")
-        ubm.fit(ubm_features)
+        ubm = self._fit_ubm_with_progress(ubm_features, on_progress)
         self.model_repository.save_ubm(ubm)
-        _emit_progress(on_progress, 35.0, "UBM fitted and saved")
+        _emit_progress(on_progress, UBM_FIT_STAGE_END, "UBM fitted and saved")
 
         speakers = self._group_by_speaker(gmm_repo.list_stems())
         if not speakers:
@@ -104,8 +105,8 @@ class TrainModelsUseCase:
 
         for speaker_idx, label in enumerate(speaker_labels):
             stems = speakers[label]
-            stage_start = 35.0 + (65.0 * speaker_idx / total_speakers)
-            stage_end = 35.0 + (65.0 * (speaker_idx + 1) / total_speakers)
+            stage_start = UBM_FIT_STAGE_END + (65.0 * speaker_idx / total_speakers)
+            stage_end = UBM_FIT_STAGE_END + (65.0 * (speaker_idx + 1) / total_speakers)
             extract_end = stage_start + (stage_end - stage_start) * 0.5
 
             logger.info("Adapting speaker model for '%s' (%d file(s))", label, len(stems))
@@ -146,6 +147,49 @@ class TrainModelsUseCase:
             if on_item is not None:
                 on_item(idx, total, stem)
         return features
+
+    def _fit_ubm_with_progress(
+        self,
+        ubm_features: np.ndarray,
+        on_progress: ProgressCallback | None,
+    ) -> GaussianMixture:
+        """Fit UBM and emit per-iteration EM progress (throttled)."""
+        ubm = GaussianMixture(
+            n_components=self.config.n_gaussians,
+            covariance_type="diag",
+            max_iter=1,
+            warm_start=True,
+        )
+
+        _emit_progress(on_progress, UBM_FIT_STAGE_START, f"Fitting UBM (EM 0/{UBM_MAX_EM_ITERATIONS})")
+
+        converged = False
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=ConvergenceWarning)
+            for em_iter in range(1, UBM_MAX_EM_ITERATIONS + 1):
+                ubm.fit(ubm_features)
+                converged = bool(getattr(ubm, "converged_", False))
+
+                should_emit = (
+                    (em_iter % UBM_PROGRESS_EMIT_EVERY == 0)
+                    or converged
+                    or em_iter == UBM_MAX_EM_ITERATIONS
+                )
+                if should_emit:
+                    percent = UBM_FIT_STAGE_START + (
+                        (em_iter / UBM_MAX_EM_ITERATIONS) * (UBM_FIT_STAGE_END - UBM_FIT_STAGE_START)
+                    )
+                    _emit_progress(on_progress, percent, f"Fitting UBM (EM {em_iter}/{UBM_MAX_EM_ITERATIONS})")
+
+                if converged:
+                    break
+
+        if not converged:
+            logger.warning(
+                "UBM fitting did not converge after %d EM iterations; continuing with latest estimate.",
+                UBM_MAX_EM_ITERATIONS,
+            )
+        return ubm
 
     @staticmethod
     def _group_by_speaker(stems: list[str]) -> dict[str, list[str]]:
@@ -188,7 +232,7 @@ class IdentifySpeakersUseCase:
         speaker_models = {label: self.model_repository.load_speaker_model(label) for label in labels}
 
         _emit_progress(on_progress, 0.0, f"Identifying {len(test_stems)} file(s)")
-        results = []
+        results: list[IdentificationResult] = []
         total = len(test_stems)
         for idx, stem in enumerate(test_stems, start=1):
             clip = test_repo.load(stem)
@@ -208,3 +252,4 @@ class IdentifySpeakersUseCase:
             if label in stem:
                 return label
         return None
+
