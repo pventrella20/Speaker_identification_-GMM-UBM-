@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speaker-id"
+version = "2.0.0"
+description = "GMM-UBM speaker identification system"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "python_speech_features",
+    "pydub",
+    "joblib",
+    "matplotlib",
+    "pandas",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+speaker-id = "speaker_id.cli:main"
+
+speaker-id-gui = "speaker_id.gui:main"
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
